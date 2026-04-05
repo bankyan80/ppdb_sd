@@ -278,7 +278,111 @@ function lS(){var j=document.getElementById('xJj'),s=document.getElementById('xS
 function sF(e){e.preventDefault();if(!db){alert('Database belum terhubung.');return}
 var sekolahTujuan=(document.getElementById('xSt').value||'').trim();
 var st=getSchoolSettings(sekolahTujuan);
-if(st&&!isRegistrationOpen(st)){alert('Maaf, pendaftaran untuk '+sekolahTujuan+' telah ditutup.');return}var n=(document.getElementById('xN').value||'').trim(),o=(document.getElementById('xO').value||'').trim(),h=(document.getElementById('xH').value||'').trim();if(!n||!o||!h){alert('Lengkapi field wajib (*)');return}var b=document.getElementById('xB');b.disabled=true;b.innerHTML='<i class="bi bi-hourglass-split"></i>Mengirim...';var id='PPDB-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).substr(2,4).toUpperCase();db.ref('siap_ppdb_pendaftaran').child(id).set({id:id,no_pendaftaran:id,nama:n,jenis_kelamin:document.getElementById('xJ').value,tempat_lahir:document.getElementById('xT').value,tanggal_lahir:document.getElementById('xD').value,asal_sekolah:document.getElementById('xA').value,nama_ortu:o,hp_ortu:h,alamat:document.getElementById('xL').value,jenjang:document.getElementById('xJj').value,sekolah_tujuan:document.getElementById('xSt').value,status:'Menunggu',created_at:N(),updated_at:N()}).then(function(){var m=document.getElementById('fm');if(m){m.style.display='block';m.innerHTML='<div class="Al A1"><i class="bi bi-check-circle-fill"></i><div><strong>Pendaftaran Berhasil!</strong><br>No. Pendaftaran: <strong>'+id+'</strong><br><small>Simpan nomor ini untuk cek pengumuman dan registrasi.</small></div></div>'}document.getElementById('pf').reset();b.disabled=false;b.innerHTML='<i class="bi bi-send"></i>Kirim Pendaftaran'}).catch(function(er){alert('Gagal: '+er.message);b.disabled=false;b.innerHTML='<i class="bi bi-send"></i>Kirim Pendaftaran'})}
+if(st&&!isRegistrationOpen(st)){alert('Maaf, pendaftaran untuk '+sekolahTujuan+' telah ditutup.');return}
+var n=(document.getElementById('xN').value||'').trim();
+var o=(document.getElementById('xO').value||'').trim();
+var h=(document.getElementById('xH').value||'').trim();
+var tl=(document.getElementById('xD').value||'').trim();
+var al=(document.getElementById('xL').value||'').trim().toLowerCase();
+if(!n||!o||!h){alert('Lengkapi field wajib (*)');return}
+
+// === 1. VALIDASI USIA MINIMAL ===
+if(tl){
+  var birthDate=new Date(tl);
+  var nowYear=new Date().getFullYear();
+  // Batas usia minimum: lahir sebelum 1 Juli tahun berjalan dikurangi 6 tahun
+  var cutoff=new Date(nowYear-6,6,1); // 1 Juli, (tahun-6)
+  if(birthDate>cutoff){
+    var selisihBulan=((cutoff.getFullYear()-birthDate.getFullYear())*12)+(cutoff.getMonth()-birthDate.getMonth());
+    var kekuranganTahun=Math.floor(Math.abs(selisihBulan)/12);
+    var kekuranganBulan=Math.abs(selisihBulan)%12;
+    var ket='';
+    if(kekuranganTahun>0) ket+=kekuranganTahun+' tahun ';
+    if(kekuranganBulan>0) ket+=kekuranganBulan+' bulan';
+    alert('⚠️ USIA BELUM MEMENUHI SYARAT\n\nCalon siswa harus berusia minimal 6 tahun pada tanggal 1 Juli '+nowYear+'.\nUsia calon siswa saat ini kurang '+ket+' dari syarat minimum.\n\nRekomendasi usia pendaftaran: 7 tahun.\nSilahkan hubungi panitia PPDB di sekolah tujuan untuk informasi lebih lanjut.');
+    return;
+  }
+  // Cek rekomendasi usia 7 tahun
+  var cutoffRekom=new Date(nowYear-7,6,1); // 1 Juli, (tahun-7)
+  if(birthDate>cutoffRekom){
+    if(!confirm('ℹ️ REKOMENDASI USIA\n\nUsia ideal pendaftaran PPDB adalah 7 tahun. Calon siswa ini berusia antara 6-7 tahun.\n\nApakah Anda ingin melanjutkan pendaftaran?')){
+      return;
+    }
+  }
+}
+
+// === 2. CEK DUPLIKASI PENDAFTARAN ===
+var allData=G('ppdb_pendaftaran')||[];
+var dupSameSchool=null; // duplikat di sekolah yang sama
+var dupOtherSchool=null; // duplikat di sekolah lain
+if(n&&tl){
+  allData.forEach(function(r){
+    var rNama=(r.nama||'').trim().toLowerCase();
+    var rTl=(r.tanggal_lahir||'').trim();
+    var rAl=(r.alamat||'').trim().toLowerCase();
+    var rOrtu=(r.nama_ortu||'').trim().toLowerCase();
+    // Cocokkan: nama + tanggal lahir
+    if(rNama===n.toLowerCase()&&rTl===tl){
+      if(r.sekolah_tujuan===sekolahTujuan){
+        dupSameSchool=r;
+      }else{
+        dupOtherSchool=r;
+      }
+    }
+  });
+}
+// Prioritaskan cek sekolah yang sama
+if(dupSameSchool){
+  var statusTxt=dupSameSchool.status||'Menunggu';
+  var statusInfo=statusTxt==='Diterima'?'Status: DITERIMA':statusTxt==='Ditolak'?'Status: DITOLAK':'Status: Menunggu Verifikasi';
+  alert('⚠️ SUDAH TERDAFTAR\n\nCalon siswa atas nama "'+n+'" sudah terdaftar di '+sekolahTujuan+'.\n\nNo. Pendaftaran: '+dupSameSchool.no_pendaftaran+'\n'+statusInfo+'\n\nSilakan menghubungi panitia PPDB di '+sekolahTujuan+' untuk informasi lebih lanjut.');
+  return;
+}
+// Cek duplikat di sekolah lain
+if(dupOtherSchool){
+  var rNama2=dupOtherSchool.nama||n;
+  var rTl2=dupOtherSchool.tanggal_lahir?fmtDate(dupOtherSchool.tanggal_lahir):'-';
+  var rAl2=dupOtherSchool.alamat||'-';
+  var rOrtu2=dupOtherSchool.nama_ortu||'-';
+  if(!confirm('⚠️ DATA PENDAFTARAN DITEMUKAN DI SEKOLAH LAIN\n\nCalon siswa berikut sudah terdaftar:\n\nNama          : '+rNama2+'\nTgl Lahir    : '+rTl2+'\nAlamat        : '+rAl2+'\nNama Ortu   : '+rOrtu2+'\nSekolah      : '+dupOtherSchool.sekolah_tujuan+'\nNo. Daftar   : '+dupOtherSchool.no_pendaftaran+'\n\nApakah Anda tetap ingin mendaftar ke '+sekolahTujuan+'?')){
+    return;
+  }
+}
+
+// === 3. KIRIM PENDAFTARAN ===
+var b=document.getElementById('xB');
+b.disabled=true;b.innerHTML='<i class="bi bi-hourglass-split"></i>Mengirim...';
+var id='PPDB-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).substr(2,4).toUpperCase();
+db.ref('siap_ppdb_pendaftaran').child(id).set({
+  id:id,no_pendaftaran:id,nama:n,jenis_kelamin:document.getElementById('xJ').value,
+  tempat_lahir:document.getElementById('xT').value,tanggal_lahir:tl,
+  asal_sekolah:document.getElementById('xA').value,nama_ortu:o,hp_ortu:h,
+  alamat:document.getElementById('xL').value,jenjang:document.getElementById('xJj').value,
+  sekolah_tujuan:sekolahTujuan,status:'Menunggu',created_at:N(),updated_at:N()
+}).then(function(){
+  // === 4. NOTIFIKASI BERHASIL ===
+  var m=document.getElementById('fm');
+  if(m){
+    m.style.display='block';
+    m.innerHTML='<div class="Rc" style="margin-bottom:16px">'
+      +'<i class="bi bi-check-circle-fill"></i>'
+      +'<h4>Pendaftaran Berhasil Terkirim!</h4>'
+      +'<p style="font-size:13px;color:var(--h);margin:0">Data Anda telah disimpan dan menunggu verifikasi dari panitia PPDB.</p>'
+      +'</div>'
+      +'<div class="Al A1"><i class="bi bi-check-circle-fill"></i><div>'
+      +'<strong>No. Pendaftaran:</strong><br><span style="font-size:16px;font-weight:800;letter-spacing:.5px;color:#047857;">'+id+'</span><br>'
+      +'<small style="color:#166534">✅ Simpan nomor ini untuk cek pengumuman dan registrasi ulang.</small>'
+      +'</div></div>';
+  }
+  // Scroll ke notifikasi
+  var fmEl=document.getElementById('fm');
+  if(fmEl)fmEl.scrollIntoView({behavior:'smooth',block:'center'});
+  document.getElementById('pf').reset();
+  b.disabled=false;b.innerHTML='<i class="bi bi-send"></i>Kirim Pendaftaran';
+}).catch(function(er){
+  alert('Gagal mengirim pendaftaran: '+er.message);
+  b.disabled=false;b.innerHTML='<i class="bi bi-send"></i>Kirim Pendaftaran';
+})}
 function rP(el){el.innerHTML='<div class="Cd"><div class="Ch"><h5><i class="bi bi-megaphone text-success"></i>Pengumuman Hasil Seleksi</h5></div><div class="Cb"><div class="Al A4"><i class="bi bi-info-circle"></i><div>Masukkan nama atau No. Pendaftaran untuk melihat status.</div></div><div class="row g-3 mb-3"><div class="col-md-8"><input type="text" class="Fc" id="sK" placeholder="Cari nama atau no. pendaftaran..." onkeyup="if(event.key===\'Enter\')dS()"></div><div class="col-md-4"><button class="Bt Bt-sm" onclick="dS()"><i class="bi bi-search"></i>Cari</button></div></div><div id="sR"><div class="text-center py-4" style="color:var(--i)"><i class="bi bi-inbox" style="font-size:36px;display:block;margin-bottom:8px"></i>Masukkan kata kunci pencarian</div></div></div></div>'}
 function dS(){var kw=(document.getElementById('sK').value||'').trim().toLowerCase(),rd=document.getElementById('sR');if(!rd)return;var settings=getAllSettings();var anyAnnounced=false;settings.forEach(function(s){if(isAnnounced(s))anyAnnounced=true});if(!anyAnnounced&&settings.length){rd.innerHTML='<div class="Al A2"><i class="bi bi-clock-history"></i><div><strong>Belum Ada Pengumuman.</strong><br>Pengumuman hasil seleksi PPDB belum dirilis. Silakan cek kembali sesuai jadwal pengumuman.</div></div>';return}if(!kw){rd.innerHTML='<div class="text-center py-4" style="color:var(--i)"><i class="bi bi-inbox" style="font-size:36px;display:block;margin-bottom:8px"></i>Masukkan kata kunci</div>';return}var dt=G('ppdb_diterima'),pn=G('ppdb_pendaftaran'),res=[];if(dt.length)res=dt.filter(function(r){return(r.nama||'').toLowerCase().indexOf(kw)>=0||(r.no_pendaftaran||'').toLowerCase().indexOf(kw)>=0});else res=pn.filter(function(r){return(r.nama||'').toLowerCase().indexOf(kw)>=0||(r.no_pendaftaran||'').toLowerCase().indexOf(kw)>=0});if(!res.length){rd.innerHTML='<div class="Al A2"><i class="bi bi-exclamation-triangle"></i><div><strong>Data tidak ditemukan.</strong></div></div>';return}var h='<div class="Tw"><table class="T2"><thead><tr><th>No</th><th>No. Pendaftaran</th><th>Nama</th><th>Jenjang</th><th>Sekolah</th><th>Status</th></tr></thead><tbody>';res.forEach(function(r,i){var s=(r.status||'Menunggu').toLowerCase(),c='G2',tx=r.status||'Menunggu';if(s==='diterima'||s==='accepted')c='G1';else if(s==='ditolak'||s==='rejected')c='G3';h+='<tr><td>'+(i+1)+'</td><td><code>'+H(r.no_pendaftaran||r.id||'-')+'</code></td><td><strong>'+H(r.nama||'-')+'</strong></td><td>'+H(r.jenjang||'-')+'</td><td>'+H(r.sekolah_tujuan||'-')+'</td><td><span class="Bg '+c+'">'+tx+'</span></td></tr>'});h+='</tbody></table></div>';rd.innerHTML=h}
 function rR(el){el.innerHTML='<div class="Cd"><div class="Ch"><h5><i class="bi bi-clipboard-check text-success"></i>Registrasi Peserta Diterima</h5></div><div class="Cb"><div class="Al A4"><i class="bi bi-info-circle"></i><div>Masukkan No. Pendaftaran. Jika status <strong>Diterima</strong>, Anda dapat mengunduh formulir dan mengunggah berkas.</div></div><div class="row g-3 mb-3"><div class="col-md-8"><input type="text" class="Fc" id="rN" placeholder="Masukkan No. Pendaftaran..." onkeyup="if(event.key===\'Enter\')cR()"></div><div class="col-md-4"><button class="Bt Bt-sm" onclick="cR()"><i class="bi bi-search"></i>Cek Status</button></div></div><div id="rRes"></div></div></div>'}
